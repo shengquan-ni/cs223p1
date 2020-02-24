@@ -7,17 +7,15 @@ package cs223.Common;
 //TRANSACTION_SERIALIZABLE = 8
 
 
-//Throughput = 671.3117057364792 tps
-//Avg response time for queries = 4.476574386859584 s
-//total time = 1261.40806538 s
+import javax.transaction.xa.XAResource;
 
 public class Constants {
 
     public static final String dataRootPath = "D:\\project1";
 
-    public static final DatabaseType dbType = DatabaseType.Postgres;
+    public static DatabaseType dbType = DatabaseType.MySQL;
 
-    public static final String url = "cs223";
+    public static String url = "//localhost:3306/cs223";
 
     public static final String params = "";
 
@@ -25,17 +23,23 @@ public class Constants {
 
     public static final String password = "cs223";
 
-    public static final int isolationLevel = 2;
+    public static int isolationLevel = 1;
 
-    public static final int maxThreads = 10;
+    public static final int maxThreads = 8;
 
     public static final int minInsertions = 1;
 
     public static final int maxInsertions = 10;
 
-    public static final String benchmarkType = "low_concurrency";
+    public static String benchmarkType = "low_concurrency";
 
     public static final long transactionInterval = 1000;  //1000ms
+
+    public static int numTransactions = 10000;
+
+    public static int COMMIT = XAResource.XA_OK;
+
+    public static int ABORT = -1;
 
 
 }

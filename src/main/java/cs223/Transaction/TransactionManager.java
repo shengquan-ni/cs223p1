@@ -15,8 +15,8 @@ import java.util.List;
 
 public class TransactionManager {
 
-    private SQLFileScanner[] scanners = new SQLFileScanner[3];
-    private List<Pair<Timestamp,String>> temp = new ArrayList<>(3);
+    private SQLFileScanner scanner;
+    private Pair<Timestamp,String> temp;
     private int minInsertions;
     private int maxInsertions;
     private long transactionInterval;
@@ -26,62 +26,31 @@ public class TransactionManager {
         return day/(24*60);
     }
 
-
-
     public TransactionManager(String benchmarkType, int minInsertions, int maxInsertions, long transactionInterval) throws IOException {
-        scanners[0] = new SQLDataFileScanner(Constants.dataRootPath+"\\sorted_data\\"+benchmarkType+"\\observation_"+benchmarkType+".sql");
-        scanners[1] = new SQLDataFileScanner(Constants.dataRootPath+"\\sorted_data\\"+benchmarkType+"\\semantic_observation_"+benchmarkType+".sql");
-        scanners[2] = new SQLQueryFileScanner(Constants.dataRootPath+"\\sorted_queries\\"+benchmarkType+"\\queries.txt");
+        scanner = new SQLDataFileScanner(Constants.dataRootPath+"\\sorted_data\\"+benchmarkType+"\\observation_"+benchmarkType+".sql");
         this.minInsertions = minInsertions;
         this.maxInsertions = maxInsertions;
         this.transactionInterval = transactionInterval;
         this.current = new Timestamp(0);
-        for(int i=0;i<3;++i){
-            temp.add(scanners[i].next());
-            if(temp.get(i).getKey().before(current)){
-                current = temp.get(i).getKey();
-            }
-        }
+        temp = scanner.next();
     }
 
-    public Tuple3<Long,String[],Boolean> next() throws IOException {
+    public String[] next() throws IOException {
         ArrayList<String> result = new ArrayList<>(minInsertions);
-        boolean isQuery = false;
-        long delay = 0;
         for(int i=0;i<maxInsertions;++i){
-            int minIndex = 0;
-            for(int j=1;j<3;++j){
-                if(temp.get(minIndex) == null || (temp.get(j) != null && temp.get(j).getKey().before(temp.get(minIndex).getKey()))){
-                    minIndex = j;
-                }
-            }
-            if(temp.get(minIndex) == null){
-                break;
-            }
             long diff = 0;
             if(current.getTime()>0){
-                diff = temp.get(minIndex).getKey().getTime()-current.getTime();
+                diff = temp.getKey().getTime()-current.getTime();
             }
-            current = temp.get(minIndex).getKey();
-            delay = diffScaling(diff);
+            current = temp.getKey();
             if(i<minInsertions || diff<=transactionInterval) {
-                if(minIndex == 2){
-                    if(i!=0){
-                        break;
-                    }
-                    isQuery = true;
-                    result.add(temp.get(minIndex).getValue());
-                    temp.set(minIndex, scanners[minIndex].next());
-                    break;
-                }else {
-                    result.add(temp.get(minIndex).getValue());
-                    temp.set(minIndex, scanners[minIndex].next());
-                }
+                    result.add(temp.getValue());
+                    temp = scanner.next();
             }else{
                 break;
             }
         }
-        return new Tuple3<>(delay,result.isEmpty()?null:result.toArray(new String[0]),isQuery);
+        return result.isEmpty()?null:result.toArray(new String[0]);
     }
 
 }
