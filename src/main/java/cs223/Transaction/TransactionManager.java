@@ -38,6 +38,11 @@ public class TransactionManager {
     public String[] next() throws IOException {
         ArrayList<String> result = new ArrayList<>(minInsertions);
         for(int i=0;i<maxInsertions;++i){
+            if(temp.getValue().contains("SET")){
+                temp = scanner.next();
+                i--;
+                continue;
+            }
             long diff = 0;
             if(current.getTime()>0){
                 diff = temp.getKey().getTime()-current.getTime();

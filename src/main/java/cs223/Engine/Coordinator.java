@@ -21,6 +21,7 @@ public class Coordinator extends AbstractBehavior<Coordinator.Command> {
     int transactionCounter = 0;
     int numVoteReceived = 0;
     boolean voteToAbort = false;
+    ArrayList<ActorRef<Agent.Command>> agentsInCurrentTransaction;
 
     public interface Command{}
 
@@ -73,34 +74,41 @@ public class Coordinator extends AbstractBehavior<Coordinator.Command> {
                 .onMessage(RunBenchmark.class, this::onRunBenchmark)
                 .onMessage(NextTransaction.class,this::onNextTransaction)
                 .onMessage(Agent.AgentReply.class,this::onReceiveReply)
+                .onMessage(Ack.class,this::onAck)
                 .build();
     }
 
+
+    private Behavior<Command> onAck(Ack ack){
+        return Behaviors.same();
+    }
     private Behavior<Command> onReceiveReply(Agent.AgentReply reply){
         numVoteReceived++;
         if(reply.command == Constants.ABORT)
             voteToAbort = true;
         int currentTransaction = transactionCounter;
-        if(numVoteReceived == agents.size()){
+        if(numVoteReceived == agentsInCurrentTransaction.size()){
             if(voteToAbort){
-                for (ActorRef<Agent.Command> agent : agents) {
+                for (ActorRef<Agent.Command> agent : agentsInCurrentTransaction) {
                     getContext().ask(Ack.class,agent, Duration.ofSeconds(30), Agent.Abort::new,(response, throwable) ->{
                         if(response == null){
                             System.out.println("Transaction "+currentTransaction+" didn't successfully abort");
                         }
-                        return null;
+                        return Ack.INSTANCE;
                     });
                 }
             }else{
-                for (ActorRef<Agent.Command> agent : agents) {
+                for (ActorRef<Agent.Command> agent : agentsInCurrentTransaction) {
                     getContext().ask(Ack.class,agent, Duration.ofSeconds(30), Agent.Commit::new,(response, throwable) ->{
                         if(response == null){
                             System.out.println("Transaction "+currentTransaction+" didn't successfully commit");
                         }
-                        return null;
+                        return Ack.INSTANCE;
                     });
                 }
             }
+            numVoteReceived = 0;
+            voteToAbort = false;
             getContext().getSelf().tell(new NextTransaction());
         }
         return Behaviors.same();
@@ -108,6 +116,8 @@ public class Coordinator extends AbstractBehavior<Coordinator.Command> {
 
     private Behavior<Command> onNextTransaction(NextTransaction nt) throws IOException {
         if(transactionCounter<Constants.numTransactions){
+            partitions.forEach(ArrayList::clear);
+            agentsInCurrentTransaction = new ArrayList<>();
             String[] res = tm.next();
             if(res == null){
                 replyTo.tell(BenchmarkCompleted.INSTANCE);
@@ -119,11 +129,14 @@ public class Coordinator extends AbstractBehavior<Coordinator.Command> {
                 while(m.find()){
                     results.add(m.group());
                 }
-                int hash = (results.get(1)+results.get(2)).hashCode()%partitions.size();
+                int hash = ((results.get(1)+results.get(2)).hashCode()%partitions.size()+partitions.size())%partitions.size();
                 partitions.get(hash).add(i);
             }
             for(int i=0;i<agents.size();++i){
-                agents.get(i).tell(new Agent.Prepare((String[])partitions.get(i).toArray(),transactionCounter));
+                if(!partitions.get(i).isEmpty()){
+                    agents.get(i).tell(new Agent.Prepare(partitions.get(i).toArray(new String[0]),transactionCounter));
+                    agentsInCurrentTransaction.add(agents.get(i));
+                }
             }
             transactionCounter++;
         }
@@ -138,7 +151,8 @@ public class Coordinator extends AbstractBehavior<Coordinator.Command> {
         agents = new ArrayList<>(runBenchmark.numAgents);
         partitions = new ArrayList<>(runBenchmark.numAgents);
         for(int i=0;i<runBenchmark.numAgents;++i){
-            partitions.set(i,new ArrayList<>());
+            partitions.add(new ArrayList<>());
+            agents.add(getContext().spawn(Agent.create(getContext().getSelf(),Constants.startPort+i+1,i+1),"agent"+i+1));
         }
         tm = new TransactionManager(runBenchmark.benchmarkType,runBenchmark.minInsertions,runBenchmark.maxInsertions,runBenchmark.transactionInterval);
         getContext().getSelf().tell(new NextTransaction());

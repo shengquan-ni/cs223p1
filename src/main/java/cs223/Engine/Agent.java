@@ -17,8 +17,6 @@ import java.io.FileReader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
-import java.time.Duration;
-import java.util.concurrent.CompletionStage;
 
 public class Agent extends AbstractBehavior<Agent.Command> {
 
@@ -83,6 +81,7 @@ public class Agent extends AbstractBehavior<Agent.Command> {
         if(!isNowCommitPhase)
             return Behaviors.same();
         try {
+            System.out.println("agent"+bid+" commit");
             XAconn.commit(currentId,false);
         } catch (XAException e) {
             e.printStackTrace();
@@ -97,6 +96,7 @@ public class Agent extends AbstractBehavior<Agent.Command> {
         if(!isNowCommitPhase)
             return Behaviors.same();
         try {
+            System.out.println("agent"+bid+" rollback");
             XAconn.rollback(currentId);
         } catch (XAException e) {
             e.printStackTrace();
@@ -121,10 +121,12 @@ public class Agent extends AbstractBehavior<Agent.Command> {
             XAconn.end(currentId, XAResource.TMSUCCESS);
             int result = XAconn.prepare(currentId);
             //vote YES
+            System.out.println("agent"+bid+" vote YES on transaction "+task.gid);
             coordinator.tell(new AgentReply(result,currentId));
         }catch(Exception e){
             e.printStackTrace();
             //vote NO
+            System.out.println("agent"+bid+" vote NO on transaction "+task.gid);
             coordinator.tell(new AgentReply(Constants.ABORT,currentId));
         }
         //start of the second phase
